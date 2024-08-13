@@ -2,6 +2,12 @@ const express = require("express");
 const morgan = require("morgan");
 const cors = require("cors");
 const path = require("path");
+const mongoose = require("mongoose");
+const Person = require("./models/person");
+
+// Load environment for MongoDB password
+require("dotenv").config();
+const mongodb_uri = process.env.MONGODB_URI;
 
 const app = express();
 app.use(express.static(path.join(__dirname, "dist")));
@@ -12,37 +18,33 @@ app.use(cors());
 morgan.token("body", (req) => {
     return JSON.stringify(req.body);
 });
+
 app.use(morgan(":method :url :status :res[content-length] - :response-time ms :body"));
 
-let persons = [
-    {
-        id: 1,
-        name: "Arto Hellas",
-        number: "040-123456",
-    },
-    {
-        id: 2,
-        name: "Ada Lovelace",
-        number: "39-44-5323523",
-    },
-    {
-        id: 3,
-        name: "Dan Abramov",
-        number: "12-43-234345",
-    },
-    {
-        id: 4,
-        name: "Mary Poppendieck",
-        number: "39-23-6423122",
-    },
-];
+mongoose.set("strictQuery", false);
+
+mongoose
+    .connect(mongodb_uri, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+    })
+    .then(() => {
+        console.log("Connected to MongoDB");
+    })
+    .catch((error) => {
+        console.error("Error connecting to MongoDB:", error.message);
+        process.exit(1);
+    });
 
 app.get("/", (req, res) => {
     res.send("Hello, World!");
 });
 
+// Get all the persons
 app.get("/api/persons", (req, res) => {
-    res.json(persons);
+    Person.find({}).then((persons) => {
+        res.json(persons);
+    });
 });
 
 app.get("/api/persons/:id", (req, res) => {
@@ -64,27 +66,30 @@ app.delete("/api/persons/:id", (req, res) => {
 
 app.post("/api/persons", (req, res) => {
     const body = req.body;
-    //Check if some important data is empty
+
+    // Check if some important data is empty
     if (!body.name || !body.number) {
         return res.status(400).json({
             error: "Name or number is missing",
         });
     }
-    //Check if the person is already stored
+
+    // Check if the person is already stored
     if (persons.some((person) => person.name === body.name)) {
         return res.status(400).json({
             error: `${body.name} is already on the Phonebook`,
         });
     }
 
-    const newPerson = {
-        id: persons.length > 0 ? Math.max(...persons.map((n) => n.id)) + 1 : 1,
+    const newPerson = new Person({
         name: body.name,
         number: body.number,
-    };
+        id: persons.length > 0 ? Math.max(...persons.map((n) => n.id)) + 1 : 1,
+    });
 
-    persons = [...persons, newPerson];
-    res.status(201).json(newPerson);
+    newPerson.save().then((savedPerson) => {
+        res.status(201).json(savedPerson);
+    });
 });
 
 // Start the server
