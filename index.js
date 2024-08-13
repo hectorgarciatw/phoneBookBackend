@@ -40,17 +40,25 @@ app.get("/", (req, res) => {
     res.send("Hello, World!");
 });
 
-// Get all the persons
+// Get all the persons from MongoDB
 app.get("/api/persons", (req, res) => {
     Person.find({}).then((persons) => {
         res.json(persons);
     });
 });
 
-app.get("/api/persons/:id", (req, res) => {
-    const id = Number(req.params.id);
-    const person = persons.find((person) => person.id === id);
-    person ? res.status(200).json(person) : res.status(404).end();
+// Get a person by id
+app.get("/api/persons/:id", async (req, res) => {
+    try {
+        const person = await Person.findById(req.params.id);
+        if (person) {
+            res.status(200).json(person);
+        } else {
+            res.status(404).end();
+        }
+    } catch (error) {
+        res.status(500).json({ error: "Failed to retrieve person" });
+    }
 });
 
 app.get("/api/info", (req, res) => {
@@ -64,32 +72,27 @@ app.delete("/api/persons/:id", (req, res) => {
     res.status(204).end();
 });
 
-app.post("/api/persons", (req, res) => {
-    const body = req.body;
+// Create a new person in MongoDB
+app.post("/api/persons", async (req, res) => {
+    const { name, number } = req.body;
 
-    // Check if some important data is empty
-    if (!body.name || !body.number) {
+    // Check if data is empty
+    if (!name || !number) {
         return res.status(400).json({
             error: "Name or number is missing",
         });
     }
 
-    // Check if the person is already stored
-    if (persons.some((person) => person.name === body.name)) {
-        return res.status(400).json({
-            error: `${body.name} is already on the Phonebook`,
+    try {
+        const newPerson = new Person({
+            name,
+            number,
         });
-    }
-
-    const newPerson = new Person({
-        name: body.name,
-        number: body.number,
-        id: persons.length > 0 ? Math.max(...persons.map((n) => n.id)) + 1 : 1,
-    });
-
-    newPerson.save().then((savedPerson) => {
+        const savedPerson = await newPerson.save();
         res.status(201).json(savedPerson);
-    });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to save person" });
+    }
 });
 
 // Start the server
