@@ -39,7 +39,6 @@ temp/
 *.temp
 
 # Build files
-dist/
 build/
 
 # Dependency directories
