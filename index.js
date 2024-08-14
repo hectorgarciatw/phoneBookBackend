@@ -19,6 +19,18 @@ morgan.token("body", (req) => {
     return JSON.stringify(req.body);
 });
 
+const errorHandler = (error, request, response, next) => {
+    console.error(error.message);
+
+    if (error.name === "CastError" && error.kind === "ObjectId") {
+        return response.status(400).send({ error: "malformatted id" });
+    } else if (error.name === "ValidationError") {
+        return response.status(400).json({ error: error.message });
+    }
+
+    next(error);
+};
+
 app.use(morgan(":method :url :status :res[content-length] - :response-time ms :body"));
 
 mongoose.set("strictQuery", false);
@@ -36,10 +48,6 @@ mongoose
         process.exit(1);
     });
 
-app.get("/", (req, res) => {
-    res.send("Hello, World!");
-});
-
 // Get all the persons from MongoDB
 app.get("/api/persons", (req, res) => {
     Person.find({}).then((persons) => {
@@ -47,8 +55,55 @@ app.get("/api/persons", (req, res) => {
     });
 });
 
+// Update the person from MongoDB
+app.put("/api/persons/:id", async (req, res, next) => {
+    const { number } = req.body;
+
+    // Verificar si el número fue proporcionado
+    if (!number) {
+        return res.status(400).json({
+            error: "Number is missing",
+        });
+    }
+
+    // Crear un objeto con el nuevo número
+    const updatedPerson = { number };
+
+    try {
+        // Buscar la persona por ID y actualizar el número
+        const result = await Person.findByIdAndUpdate(req.params.id, updatedPerson, {
+            new: true, // Devuelve el documento modificado en lugar del original
+            runValidators: true, // Ejecuta las validaciones del esquema
+            context: "query", // Requerido para que Mongoose valide correctamente
+        });
+
+        if (result) {
+            res.status(200).json(result); // Responde con la persona actualizada
+        } else {
+            res.status(404).json({ error: "Person not found" }); // Si no se encuentra la persona
+        }
+    } catch (error) {
+        next(error); // Maneja los errores
+    }
+});
+
+// Delete a person from MongoDB
 // Get a person by id
-app.get("/api/persons/:id", async (req, res) => {
+app.delete("/api/persons/:id", async (req, res, next) => {
+    try {
+        const person = await Person.findByIdAndDelete(req.params.id);
+        if (person) {
+            res.status(204).end(); // No Content, la eliminación fue exitosa
+        } else {
+            res.status(404).end(); // Not Found, no se encontró el ID
+        }
+    } catch (error) {
+        next(error); // Manejo de errores
+    }
+});
+
+// Get a person by id
+app.get("/api/persons/:id", async (req, res, next) => {
     try {
         const person = await Person.findById(req.params.id);
         if (person) {
@@ -57,23 +112,22 @@ app.get("/api/persons/:id", async (req, res) => {
             res.status(404).end();
         }
     } catch (error) {
-        res.status(500).json({ error: "Failed to retrieve person" });
+        next(error);
     }
 });
 
-app.get("/api/info", (req, res) => {
-    const currentDate = new Date();
-    res.send(`Phonebook has info for ${persons.length} people <br> ${currentDate.toString()}`);
-});
-
-app.delete("/api/persons/:id", (req, res) => {
-    const id = Number(req.params.id);
-    persons = persons.filter((person) => person.id !== id);
-    res.status(204).end();
+app.get("/api/info", async (req, res, next) => {
+    try {
+        const personsCount = await Person.countDocuments({}); // Cuenta los documentos en la colección 'persons'
+        const currentDate = new Date();
+        res.send(`Phonebook has info for ${personsCount} people <br> ${currentDate.toString()}`);
+    } catch (error) {
+        next(error); // Maneja los errores
+    }
 });
 
 // Create a new person in MongoDB
-app.post("/api/persons", async (req, res) => {
+app.post("/api/persons", async (req, res, next) => {
     const { name, number } = req.body;
 
     // Check if data is empty
@@ -91,9 +145,11 @@ app.post("/api/persons", async (req, res) => {
         const savedPerson = await newPerson.save();
         res.status(201).json(savedPerson);
     } catch (error) {
-        res.status(500).json({ error: "Failed to save person" });
+        next(error); // Maneja los errores utilizando next
     }
 });
+
+app.use(errorHandler);
 
 // Start the server
 const PORT = process.env.PORT || 3001;
