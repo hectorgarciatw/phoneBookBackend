@@ -100,6 +100,9 @@
         "vary": "^1.1.2"
     },
     "devDependencies": {
+        "@stylistic/eslint-plugin-js": "^2.6.2",
+        "eslint": "^9.9.0",
+        "globals": "^15.9.0",
         "nodemon": "^3.1.4"
     },
     "scripts": {

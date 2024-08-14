@@ -145,7 +145,11 @@ app.post("/api/persons", async (req, res, next) => {
         const savedPerson = await newPerson.save();
         res.status(201).json(savedPerson);
     } catch (error) {
-        next(error); // Maneja los errores utilizando next
+        if (error.name === "ValidationError") {
+            // Si la validación de Mongoose falla, devolver un error 400
+            return res.status(400).json({ error: error.message });
+        }
+        next(error); // Maneja otros tipos de errores
     }
 });
 
